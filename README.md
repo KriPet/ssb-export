@@ -1,4 +1,4 @@
-## Tweetdeck utilities
+## Sandnes sparebank export
 
 This is a simple userscript that adds a simple hotkey to export all accounts from SSB (Sandnes Sparebank)
 Potentially works with other banks using the portalbank.no API
