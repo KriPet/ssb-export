@@ -5,6 +5,7 @@
 // @author       Peter Kristoffersen
 // @description  Press "-" to export the last month of transactions from all accounts
 // @match        https://id.portalbank.no/*
+// @updateUrl    https://github.com/KriPet/ssb-export/raw/master/ssb-export.user.js
 // @copyright    2021+, Peter Kristoffersen
 // @inject-into  page
 // ==/UserScript==
