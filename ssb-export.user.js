@@ -2,10 +2,11 @@
 // ==UserScript==
 // @name         SSB transaction export
 // @namespace    http://bakemo.no/
-// @version      0.2
+// @version      0.3
 // @author       Peter Kristoffersen
 // @description  Press "-" to export the last month of transactions from all accounts
 // @match        https://id.portalbank.no/*
+// @match        https://www.portalbank.no/*
 // @updateUrl    https://github.com/KriPet/ssb-export/raw/master/ssb-export.user.js
 // @copyright    2021+, Peter Kristoffersen
 // @inject-into  page
@@ -38,18 +39,35 @@ class SsbUtilities {
     }
     static async downloadTransactions(account) {
         const transactions = await this.getTransactions(account.entityKey.accountId, account.entityKey.agreementId);
-        const header = "date\tmemo\tamount\n";
-        const rows = transactions
-            .filter(t => t.reconcileMark === false)
-            .map(t => `${t.paymentDate}\t${t.label}\t${t.amount.value / 100}\n`);
-        if (rows.length === 0)
+        if (transactions.length == 0)
             return;
-        const blob = new Blob([header, ...rows], { type: "text/tsv" });
+        const { doc, transactionListElement } = this.createXmlDocument();
+        for (const transaction of transactions) {
+            const transactionElement = doc.createElement("STMTTRN");
+            const dateElem = transactionElement.appendChild(doc.createElement("DTPOSTED"));
+            const amountElem = transactionElement.appendChild(doc.createElement("TRNAMT"));
+            const nameElem = transactionElement.appendChild(doc.createElement("NAME"));
+            nameElem.append(transaction.label);
+            dateElem.append(transaction.paymentDate.replace(/-/g, ''));
+            amountElem.append((transaction.amount.value / 100).toString());
+            transactionListElement.appendChild(transactionElement);
+        }
+        const xmlText = new XMLSerializer().serializeToString(doc);
+        const blob = new Blob([xmlText], { type: "application/x-ofx" });
         const link = document.createElement("a");
         const dateString = new Date().toISOString().substring(0, 10);
-        link.download = `${dateString} ${account.name}.tsv`;
+        link.download = `${dateString} ${account.name}.ofx`;
         link.href = URL.createObjectURL(blob);
         link.click();
+    }
+    static createXmlDocument() {
+        const doc = document.implementation.createDocument(null, "OFX", null);
+        const OFX = doc.documentElement;
+        const BANKMSGSRSV1 = OFX.appendChild(doc.createElement("BANKMSGSRSV1"));
+        const STMTTRNRS = BANKMSGSRSV1.appendChild(doc.createElement("STMTTRNRS"));
+        const STMTRS = STMTTRNRS.appendChild(doc.createElement("STMTRS"));
+        const transactionListElement = STMTRS.appendChild(doc.createElement("BANKTRANLIST"));
+        return { doc, transactionListElement };
     }
     static async downloadAllAccountTransactions() {
         const accounts = await this.getAccounts();
