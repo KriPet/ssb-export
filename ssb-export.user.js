@@ -2,14 +2,12 @@
 // ==UserScript==
 // @name         SSB transaction export
 // @namespace    http://bakemo.no/
-// @version      0.3
+// @version      0.4.2
 // @author       Peter Kristoffersen
 // @description  Press "-" to export the last month of transactions from all accounts
 // @match        https://id.portalbank.no/*
 // @match        https://www.portalbank.no/*
-// @updateUrl    https://github.com/KriPet/ssb-export/raw/master/ssb-export.user.js
-// @copyright    2021+, Peter Kristoffersen
-// @inject-into  page
+// @downloadUrl    https://github.com/KriPet/ssb-export/raw/master/ssb-export.user.js
 // ==/UserScript==
 class SsbUtilities {
     static ssbFetch(url, apiVersion, body) {
@@ -41,8 +39,11 @@ class SsbUtilities {
         const transactions = await this.getTransactions(account.entityKey.accountId, account.entityKey.agreementId);
         if (transactions.length == 0)
             return;
+        const unclearedTransactions = transactions.filter(t => !t.reconcileMark);
+        if (unclearedTransactions.length == 0)
+            return;
         const { doc, transactionListElement } = this.createXmlDocument();
-        for (const transaction of transactions) {
+        for (const transaction of unclearedTransactions) {
             const transactionElement = doc.createElement("STMTTRN");
             const dateElem = transactionElement.appendChild(doc.createElement("DTPOSTED"));
             const amountElem = transactionElement.appendChild(doc.createElement("TRNAMT"));
