@@ -2,62 +2,52 @@
 // ==UserScript==
 // @name         SSB transaction export
 // @namespace    http://bakemo.no/
-// @version      0.4.2
+// @version      0.5.0
 // @author       Peter Kristoffersen
 // @description  Press "-" to export the last month of transactions from all accounts
-// @match        https://id.portalbank.no/*
-// @match        https://www.portalbank.no/*
+// @match        https://www.dengulebanken.no/*
 // @downloadUrl    https://github.com/KriPet/ssb-export/raw/master/ssb-export.user.js
 // ==/UserScript==
 class SsbUtilities {
-    static ssbFetch(url, apiVersion, body) {
+    static rootUrl = "https://www.dengulebanken.no/dagligbank-lokalbank-web/rest";
+    static accountsUrl = `${this.rootUrl}/resource/accounts`;
+    static transactionsUrl = (accountId) => `${this.rootUrl}/resource/accounts/${accountId}/transactions`;
+    static ssbFetch(url) {
         return fetch(url, {
             "credentials": "include",
-            "headers": {
-                "Content-Type": "application/json",
-                "X-SDC-API-VERSION": apiVersion
-            },
-            "body": JSON.stringify(body),
-            "method": "POST",
+            "method": "GET",
         });
     }
     static async getAccounts() {
-        const response = await SsbUtilities.ssbFetch("https://www.portalbank.no/servlet/restapi/0001/accounts/list/filter", "2", { includeCreditAccounts: true, includeDebitAccounts: true, includeLoans: true, onlyFavorites: false, onlyQueryable: false });
+        const response = await SsbUtilities.ssbFetch(this.accountsUrl);
         return await response.json();
     }
-    static async getTransactions(accountId, agreementId) {
-        const now = new Date();
-        const toDate = now.toISOString().substring(0, 10);
-        const oneMonthAsMillis = 31 * 24 * 60 * 60 * 1000;
-        const lastMonth = new Date(now.getTime() - oneMonthAsMillis);
-        const fromDate = lastMonth.toISOString().substring(0, 10);
-        const response = await SsbUtilities.ssbFetch("https://www.portalbank.no/servlet/restapi/0001/accounts/transactions/search", "3", { accountId, agreementId, transactionsFrom: fromDate, transactionsTo: toDate, includeReservations: false });
+    static async getTransactions(accountId) {
+        const response = await SsbUtilities.ssbFetch(this.transactionsUrl(accountId));
+        // Todo: We can add ?nextReference=<ref> to URL to support pagination
         const body = await response.json();
         return body.transactions;
     }
     static async downloadTransactions(account) {
-        const transactions = await this.getTransactions(account.entityKey.accountId, account.entityKey.agreementId);
+        const transactions = await this.getTransactions(account.accountId.value);
         if (transactions.length == 0)
             return;
-        const unclearedTransactions = transactions.filter(t => !t.reconcileMark);
-        if (unclearedTransactions.length == 0)
-            return;
         const { doc, transactionListElement } = this.createXmlDocument();
-        for (const transaction of unclearedTransactions) {
+        for (const transaction of transactions) {
             const transactionElement = doc.createElement("STMTTRN");
             const dateElem = transactionElement.appendChild(doc.createElement("DTPOSTED"));
             const amountElem = transactionElement.appendChild(doc.createElement("TRNAMT"));
             const nameElem = transactionElement.appendChild(doc.createElement("NAME"));
-            nameElem.append(transaction.label);
-            dateElem.append(transaction.paymentDate.replace(/-/g, ''));
-            amountElem.append((transaction.amount.value / 100).toString());
+            nameElem.append(transaction.text);
+            dateElem.append(transaction.bookingDate.replace(/-/g, ''));
+            amountElem.append((transaction.transactionAmount).toString());
             transactionListElement.appendChild(transactionElement);
         }
         const xmlText = new XMLSerializer().serializeToString(doc);
         const blob = new Blob([xmlText], { type: "application/x-ofx" });
         const link = document.createElement("a");
         const dateString = new Date().toISOString().substring(0, 10);
-        link.download = `${dateString} ${account.name}.ofx`;
+        link.download = `${dateString} ${account.alias}.ofx`;
         link.href = URL.createObjectURL(blob);
         link.click();
     }

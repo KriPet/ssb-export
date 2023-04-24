@@ -1,109 +1,56 @@
 // ==UserScript==
 // @name         SSB transaction export
 // @namespace    http://bakemo.no/
-// @version      0.4.2
+// @version      0.5.0
 // @author       Peter Kristoffersen
 // @description  Press "-" to export the last month of transactions from all accounts
-// @match        https://id.portalbank.no/*
-// @match        https://www.portalbank.no/*
+// @match        https://www.dengulebanken.no/*
 // @downloadUrl    https://github.com/KriPet/ssb-export/raw/master/ssb-export.user.js
 // ==/UserScript==
 
-
-interface SSBAccount {
-    entityKey: { accountId: string; agreementId: string };
-    name: string;
-}
-
-interface SSBTransaction {
-    paymentDate: string; // yyyy-mm-dd
-    amount: {
-        value: number; // Integer øre
-    };
-    entityKey: {
-        accountId: string;
-        agreementId: string;
-        refNumber: string;
-    };
-    label: string;
-    reconcileMark: boolean;
-}
-
-interface AccountRequestOptions {
-    includeCreditAccounts: boolean;
-    includeDebitAccounts: boolean;
-    includeLoans: boolean;
-    onlyFavorites: boolean;
-    onlyQueryable: boolean;
-}
-
-interface TransactionRequestOptions {
-    accountId: string;
-    agreementId: string;
-    transactionsFrom: string; // yyyy-mm-dd
-    transactionsTo: string; // yyyy-mm-dd
-    includeReservations: boolean;
-}
-
-
 class SsbUtilities {
 
-    private static ssbFetch(url: string, apiVersion: "2" | "3", body: AccountRequestOptions | TransactionRequestOptions) {
+    private static readonly rootUrl = "https://www.dengulebanken.no/dagligbank-lokalbank-web/rest"
+    private static readonly accountsUrl = `${this.rootUrl}/resource/accounts`
+    private static readonly transactionsUrl = (accountId: SSBAccountId) => `${this.rootUrl}/resource/accounts/${accountId}/transactions`
+
+    private static ssbFetch(url: string) {
         return fetch(url, {
             "credentials": "include",
-            "headers": {
-                "Content-Type": "application/json",
-                "X-SDC-API-VERSION": apiVersion
-            },
-            "body": JSON.stringify(body),
-            "method": "POST",
+            "method": "GET",
         });
     }
 
     private static async getAccounts(): Promise<SSBAccount[]> {
-        const response = await SsbUtilities.ssbFetch(
-            "https://www.portalbank.no/servlet/restapi/0001/accounts/list/filter",
-            "2",
-            { includeCreditAccounts: true, includeDebitAccounts: true, includeLoans: true, onlyFavorites: false, onlyQueryable: false });
-
+        const response = await SsbUtilities.ssbFetch(this.accountsUrl);
         return await response.json();
     }
 
-    private static async getTransactions(accountId: string, agreementId: string): Promise<SSBTransaction[]> {
-        const now = new Date();
-        const toDate = now.toISOString().substring(0, 10);
-        const oneMonthAsMillis = 31 * 24 * 60 * 60 * 1000;
-        const lastMonth = new Date(now.getTime() - oneMonthAsMillis);
-        const fromDate = lastMonth.toISOString().substring(0, 10);
+    private static async getTransactions(accountId: SSBAccountId): Promise<SSBTransaction[]> {
+        const response = await SsbUtilities.ssbFetch(this.transactionsUrl(accountId));
 
-        const response = await SsbUtilities.ssbFetch("https://www.portalbank.no/servlet/restapi/0001/accounts/transactions/search",
-            "3",
-            { accountId, agreementId, transactionsFrom: fromDate, transactionsTo: toDate, includeReservations: false });
+        // Todo: We can add ?nextReference=<ref> to URL to support pagination
 
-        const body: { transactions: SSBTransaction[], reservations: unknown } = await response.json();
+        const body: { transactions: SSBTransaction[], nextReference: unknown } = await response.json();
 
         return body.transactions;
     }
 
     private static async downloadTransactions(account: SSBAccount) {
-        const transactions = await this.getTransactions(account.entityKey.accountId, account.entityKey.agreementId);
+        const transactions = await this.getTransactions(account.accountId.value);
         if (transactions.length == 0)
-            return;
-
-        const unclearedTransactions = transactions.filter(t => !t.reconcileMark);
-        if (unclearedTransactions.length == 0)
             return;
 
         const { doc, transactionListElement } = this.createXmlDocument();
 
-        for (const transaction of unclearedTransactions) {
+        for (const transaction of transactions) {
             const transactionElement = doc.createElement("STMTTRN");
             const dateElem = transactionElement.appendChild(doc.createElement("DTPOSTED"));
             const amountElem = transactionElement.appendChild(doc.createElement("TRNAMT"));
             const nameElem = transactionElement.appendChild(doc.createElement("NAME"));
-            nameElem.append(transaction.label);
-            dateElem.append(transaction.paymentDate.replace(/-/g, ''));
-            amountElem.append((transaction.amount.value / 100).toString());
+            nameElem.append(transaction.text);
+            dateElem.append(transaction.bookingDate.replace(/-/g, ''));
+            amountElem.append((transaction.transactionAmount).toString());
             transactionListElement.appendChild(transactionElement);
         }
 
@@ -114,7 +61,7 @@ class SsbUtilities {
 
         const link = document.createElement("a");
         const dateString = new Date().toISOString().substring(0, 10);
-        link.download = `${dateString} ${account.name}.ofx`;
+        link.download = `${dateString} ${account.alias}.ofx`;
         link.href = URL.createObjectURL(blob);
         link.click();
     }
