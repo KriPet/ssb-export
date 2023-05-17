@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name         SSB transaction export
 // @namespace    http://bakemo.no/
-// @version      0.5.0
+// @version      0.5.1
 // @author       Peter Kristoffersen
 // @description  Press "-" to export the last month of transactions from all accounts
 // @match        https://www.dengulebanken.no/*
@@ -16,6 +16,7 @@ class SsbUtilities {
         return fetch(url, {
             "credentials": "include",
             "method": "GET",
+            "headers": { "Accept": "application/json" }
         });
     }
     static async getAccounts() {
