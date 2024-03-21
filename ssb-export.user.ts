@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SSB transaction export
 // @namespace    http://bakemo.no/
-// @version      0.5.1
+// @version      0.5.2
 // @author       Peter Kristoffersen
 // @description  Press "-" to export the last month of transactions from all accounts
 // @match        https://www.dengulebanken.no/*
@@ -49,8 +49,10 @@ class SsbUtilities {
             const dateElem = transactionElement.appendChild(doc.createElement("DTPOSTED"));
             const amountElem = transactionElement.appendChild(doc.createElement("TRNAMT"));
             const nameElem = transactionElement.appendChild(doc.createElement("NAME"));
+            const memoElem = transactionElement.appendChild(doc.createElement("MEMO"));
             nameElem.append(transaction.text);
             dateElem.append(transaction.bookingDate.replace(/-/g, ''));
+            memoElem.append(transaction.purpose);
             amountElem.append((transaction.transactionAmount).toString());
             transactionListElement.appendChild(transactionElement);
         }

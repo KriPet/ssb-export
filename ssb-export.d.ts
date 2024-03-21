@@ -19,6 +19,7 @@ interface SSBTransaction {
     transactionAmount: number
     bookingDate: DateString
     text: string
+    purpose: string
 }
 
 interface AccountRequestOptions {
