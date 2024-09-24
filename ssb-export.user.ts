@@ -1,16 +1,16 @@
 // ==UserScript==
 // @name         SSB transaction export
 // @namespace    http://bakemo.no/
-// @version      0.5.2
+// @version      0.5.3
 // @author       Peter Kristoffersen
 // @description  Press "-" to export the last month of transactions from all accounts
-// @match        https://www.dengulebanken.no/*
+// @match        https://www.rogalandsparebank.no/*
 // @downloadUrl    https://github.com/KriPet/ssb-export/raw/master/ssb-export.user.js
 // ==/UserScript==
 
 class SsbUtilities {
 
-    private static readonly rootUrl = "https://www.dengulebanken.no/dagligbank-lokalbank-web/rest"
+    private static readonly rootUrl = "https://www.rogalandsparebank.no/dagligbank-lokalbank-web/rest"
     private static readonly accountsUrl = `${this.rootUrl}/resource/accounts`
     private static readonly transactionsUrl = (accountId: SSBAccountId) => `${this.rootUrl}/resource/accounts/${accountId}/transactions`
 
