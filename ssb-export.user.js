@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name         SSB transaction export
 // @namespace    http://bakemo.no/
-// @version      0.5.3
+// @version      0.5.4
 // @author       Peter Kristoffersen
 // @description  Press "-" to export the last month of transactions from all accounts
 // @match        https://www.rogalandsparebank.no/*
@@ -11,13 +11,14 @@
 class SsbUtilities {
     static rootUrl = "https://www.rogalandsparebank.no/dagligbank-lokalbank-web/rest";
     static accountsUrl = `${this.rootUrl}/resource/accounts`;
-    static transactionsUrl = (accountId) => `${this.rootUrl}/resource/accounts/${accountId}/transactions`;
+    static transactionsUrl = (accountId) => `${this.rootUrl}/resource/accounts/${accountId}/transactions/CSV/download`;
     static ssbFetch(url) {
-        return fetch(url, {
+        const init = {
             "credentials": "include",
             "method": "GET",
             "headers": { "Accept": "application/json" }
-        });
+        };
+        return fetch(url, init);
     }
     static async getAccounts() {
         const response = await SsbUtilities.ssbFetch(this.accountsUrl);
@@ -25,9 +26,28 @@ class SsbUtilities {
     }
     static async getTransactions(accountId) {
         const response = await SsbUtilities.ssbFetch(this.transactionsUrl(accountId));
-        // Todo: We can add ?nextReference=<ref> to URL to support pagination
-        const body = await response.json();
-        return body.transactions;
+        const decoder = new TextDecoder("iso-8859-1");
+        const csvBody = decoder.decode(await response.arrayBuffer());
+        const transactions = csvBody.split("\n").slice(1, -8).map(line => {
+            const parts = line.split(";");
+            if (parts.length != 15)
+                return;
+            const moneyIn = parseFloat(parts[10] || "0");
+            const moneyOut = parseFloat(parts[11] || "0");
+            const dateParts = parts[1]?.split(".");
+            if (dateParts == undefined || dateParts.length != 3)
+                return;
+            const isoDate = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+            const transaction = {
+                transactionAmount: moneyIn + moneyOut,
+                bookingDate: isoDate,
+                text: parts[3] || "",
+                purpose: parts[14] || "",
+            };
+            return transaction;
+        });
+        const allTransactions = transactions.filter(a => a != undefined);
+        return allTransactions;
     }
     static async downloadTransactions(account) {
         const transactions = await this.getTransactions(account.accountId.value);

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         SSB transaction export
 // @namespace    http://bakemo.no/
-// @version      0.5.3
+// @version      0.5.4
 // @author       Peter Kristoffersen
 // @description  Press "-" to export the last month of transactions from all accounts
 // @match        https://www.rogalandsparebank.no/*
@@ -12,14 +12,17 @@ class SsbUtilities {
 
     private static readonly rootUrl = "https://www.rogalandsparebank.no/dagligbank-lokalbank-web/rest"
     private static readonly accountsUrl = `${this.rootUrl}/resource/accounts`
-    private static readonly transactionsUrl = (accountId: SSBAccountId) => `${this.rootUrl}/resource/accounts/${accountId}/transactions`
+    private static readonly transactionsUrl = (accountId: SSBAccountId) =>
+        `${this.rootUrl}/resource/accounts/${accountId}/transactions/CSV/download`
+
 
     private static ssbFetch(url: string) {
-        return fetch(url, {
+        const init: RequestInit = {
             "credentials": "include",
             "method": "GET",
             "headers": { "Accept": "application/json" }
-        });
+        }
+        return fetch(url, init);
     }
 
     private static async getAccounts(): Promise<SSBAccount[]> {
@@ -30,11 +33,31 @@ class SsbUtilities {
     private static async getTransactions(accountId: SSBAccountId): Promise<SSBTransaction[]> {
         const response = await SsbUtilities.ssbFetch(this.transactionsUrl(accountId));
 
-        // Todo: We can add ?nextReference=<ref> to URL to support pagination
+        const decoder = new TextDecoder("iso-8859-1")
 
-        const body: { transactions: SSBTransaction[], nextReference: unknown } = await response.json();
+        const csvBody = decoder.decode(await response.arrayBuffer())
+        const transactions = csvBody.split("\n").slice(1, -8).map(line => {
+            const parts = line.split(";")
+            if (parts.length != 15)
+                return
+            const moneyIn = parseFloat(parts[10] || "0")
+            const moneyOut = parseFloat(parts[11] || "0")
+            const dateParts = parts[1]?.split(".")
+            if (dateParts == undefined || dateParts.length != 3)
+                return
+            const isoDate: DateString = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`
+            const transaction: SSBTransaction = {
+                transactionAmount: moneyIn + moneyOut,
+                bookingDate: isoDate,
+                text: parts[3] || "",
+                purpose: parts[14] || "",
+            }
+            return transaction
+        })
 
-        return body.transactions;
+        const allTransactions = transactions.filter(a => a != undefined)
+
+        return allTransactions
     }
 
     private static async downloadTransactions(account: SSBAccount) {
