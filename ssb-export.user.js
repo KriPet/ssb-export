@@ -2,7 +2,7 @@
 // ==UserScript==
 // @name         SSB transaction export
 // @namespace    http://bakemo.no/
-// @version      0.5.4
+// @version      0.5.5
 // @author       Peter Kristoffersen
 // @description  Press "-" to export the last month of transactions from all accounts
 // @match        https://www.rogalandsparebank.no/*
@@ -25,7 +25,16 @@ class SsbUtilities {
         return await response.json();
     }
     static async getTransactions(accountId) {
-        const response = await SsbUtilities.ssbFetch(this.transactionsUrl(accountId));
+        const fromDate = new Date();
+        fromDate.setMonth(fromDate.getMonth() - 1);
+        const queryParams = new URLSearchParams({
+            "fromDate": fromDate.toISOString()
+        });
+        const urlWithParams = new URL(this.transactionsUrl(accountId));
+        urlWithParams.search = queryParams.toString();
+        const url = urlWithParams.toString();
+        console.log("Fetching transactions from: ", url);
+        const response = await SsbUtilities.ssbFetch(url);
         const decoder = new TextDecoder("iso-8859-1");
         const csvBody = decoder.decode(await response.arrayBuffer());
         const transactions = csvBody.split("\n").slice(1, -8).map(line => {
@@ -53,6 +62,8 @@ class SsbUtilities {
         const transactions = await this.getTransactions(account.accountId.value);
         if (transactions.length == 0)
             return;
+        console.log(`Found ${transactions.length} transactions for account ${account.alias}`);
+        console.table(transactions);
         const { doc, transactionListElement } = this.createXmlDocument();
         for (const transaction of transactions) {
             const transactionElement = doc.createElement("STMTTRN");
